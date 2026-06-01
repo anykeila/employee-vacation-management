@@ -1,54 +1,243 @@
 # Vacation Management API — WorkFlow S.A.
 
-REST API built with **.NET 8 (ASP.NET Core)** for managing employees and
-vacation requests, with role-based access control (RBAC), JWT authentication
-and overlap validation.
-
-> **Status:** work in progress.  
+REST API built with **.NET 8 (ASP.NET Core)** for managing employees and their
+vacation requests, with role-based access control (RBAC), JWT authentication,
+a vacation approval workflow and a company-wide overlap rule enforced at the
+database level.
 
 ## Stack
 
-| Component         | Choice                                    |
-| ----------------- | ----------------------------------------- |
-| Language / Runtime | C# / .NET 8 (LTS)                        |
-| Framework         | ASP.NET Core                              |
-| ORM               | Entity Framework Core                     |
-| Database          | PostgreSQL                                |
-| Validation        | FluentValidation                          |
-| Authentication    | JWT                                       |
-| Documentation     | Swagger / OpenAPI                         |
-| Logging           | Serilog (structured logging)              |
-| Tests             | xUnit + FluentAssertions                  |
-| Containerization  | Docker + docker-compose                   |
+| Component          | Choice                                |
+| ------------------ | ------------------------------------- |
+| Language / Runtime | C# / .NET 8 (LTS)                     |
+| Framework          | ASP.NET Core (controllers)            |
+| ORM                | Entity Framework Core 8 + Npgsql      |
+| Database           | PostgreSQL 16                         |
+| Validation         | FluentValidation                      |
+| Authentication     | JWT (HS256) + BCrypt password hashing |
+| API versioning     | Asp.Versioning (URL segment)          |
+| Documentation      | Swagger / OpenAPI (Swashbuckle)       |
+| Logging            | Serilog (structured JSON)             |
+| Error format       | RFC 7807 ProblemDetails               |
+| Tests              | xUnit + FluentAssertions + EF InMemory |
+| Containerization   | Docker + docker-compose               |
 
-## Project structure
+## Architecture
 
-Layered architecture, with dependencies always pointing towards the domain:
+Pragmatic layered architecture, with dependencies always pointing **towards the
+domain**:
 
 ```
 VacationManagement.sln
 ├── src/
-│   ├── VacationManagement.Domain          # Entities, enums and domain rules (no dependencies)
-│   ├── VacationManagement.Application      # Use cases, services, validation, contracts
-│   ├── VacationManagement.Infrastructure   # EF Core, repositories, persistence, integrations
-│   └── VacationManagement.Api              # Controllers, authentication, Swagger, composition root
+│   ├── VacationManagement.Domain          # Entities, enums, value objects, domain rules (no deps)
+│   ├── VacationManagement.Application      # Service interfaces, DTOs, validators, Result type
+│   ├── VacationManagement.Infrastructure   # EF Core, persistence, security, service implementations
+│   └── VacationManagement.Api              # Controllers, auth, Swagger, error handling, composition root
 └── tests/
-    └── VacationManagement.UnitTests        # Unit tests (vacation validation and RBAC)
+    └── VacationManagement.UnitTests        # Domain + service unit tests (overlap and RBAC)
 ```
 
-**Why layered instead of full multi-project Clean Architecture or CQRS:** for
-the scope of this exercise, a clear layered separation provides most of the
-benefits (testability, separation of concerns, dependency inversion towards the
-domain) without the boilerplate of per-feature mediators and handlers. WIP...
+**Why layered instead of full Clean Architecture / CQRS:** for the scope of this
+exercise, a clear layered separation delivers most of the benefits — testability,
+separation of concerns, dependency inversion towards the domain — without the
+boilerplate of per-feature mediators and handlers. The `Domain` project has zero
+external dependencies, so the core business rules (e.g. the inclusive
+`DateRange`) are trivially unit-testable.
 
-## How to run (summary — WIP)
+## Getting started
 
-Prerequisites: **Docker** and **docker-compose**. `docker-compose` brings up the
-API together with a PostgreSQL instance, with no need to install .NET locally.
+**Prerequisite: Docker only.** `docker-compose` brings up the API together with a
+PostgreSQL instance — no need to install .NET or PostgreSQL locally.
 
 ```bash
 docker compose up --build
 ```
 
-For local development outside the container, the **.NET 8 SDK** is required.
-The `global.json` file pins the SDK to the 8.0 line. 
+| Resource     | URL                                      |
+| ------------ | ---------------------------------------- |
+| API base     | `http://localhost:8080/api/v1`           |
+| Swagger UI   | `http://localhost:8080/swagger`          |
+| OpenAPI doc  | `http://localhost:8080/swagger/v1/swagger.json` |
+| Health check | `http://localhost:8080/health`           |
+
+On startup the API applies EF Core migrations automatically and backfills the
+seeded users' password hashes. Configuration (ports, DB credentials) can be
+overridden with a `.env` file — see [.env.example](.env.example). Defaults are
+baked into `docker-compose.yml`, so the stack also runs without one.
+
+For local development outside the container, the **.NET 8 SDK** is required
+(`global.json` pins the 8.0 line). Run the tests with:
+
+```bash
+dotnet test
+```
+
+## Seeded data and credentials
+
+All seeded users share the same password: **`Password123!`**
+
+| Id | Name             | Email                          | Role          | Manager |
+| -- | ---------------- | ------------------------------ | ------------- | ------- |
+| 1  | Ana Silva        | `ana.silva@workflow.com`       | Administrator | —       |
+| 2  | João Pereira     | `joao.pereira@workflow.com`    | Manager       | —       |
+| 5  | Joana Soares     | `joana.soares@workflow.com`    | Manager       | —       |
+| 3  | Marta Fernandes  | `marta.fernandes@workflow.com` | Employee      | João (2) |
+| 4  | Henrique Martins | `henrique.martins@workflow.com`| Employee      | Joana (5) |
+
+Three historical **approved** vacations (August/September 2025) are also seeded.
+They are inserted directly so they bypass the "no past start date" rule that
+applies to new requests (see [Design decisions](#design-decisions-and-trade-offs)).
+
+## Authentication
+
+```bash
+# 1. Log in to obtain a JWT
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ana.silva@workflow.com","password":"Password123!"}'
+
+# 2. Call protected endpoints with the token
+curl http://localhost:8080/api/v1/employees \
+  -H "Authorization: Bearer <token>"
+```
+
+In the Swagger UI, click **Authorize** and paste the token (without the
+`Bearer ` prefix).
+
+## Endpoints and authorization
+
+| Method & path                              | Administrator | Manager           | Employee     |
+| ------------------------------------------ | ------------- | ----------------- | ------------ |
+| `POST /auth/login`                         | public        | public            | public       |
+| `GET  /employees`                          | ✅            | ✅                | ❌ (403)     |
+| `GET  /employees/{id}`                     | ✅            | ✅                | ❌ (403)     |
+| `POST /employees`                          | ✅            | ❌ (403)          | ❌ (403)     |
+| `PUT  /employees/{id}`                     | ✅            | ❌ (403)          | ❌ (403)     |
+| `DELETE /employees/{id}`                   | ✅            | ❌ (403)          | ❌ (403)     |
+| `POST /vacation-requests`                  | ✅            | ✅                | ✅ (own)     |
+| `GET  /vacation-requests`                  | all           | own + direct reports | own only  |
+| `GET  /vacation-requests/{id}`             | any           | own + direct reports | own only  |
+| `POST /vacation-requests/{id}/approve`     | any           | direct reports only | ❌ (403)   |
+| `POST /vacation-requests/{id}/reject`      | any           | direct reports only | ❌ (403)   |
+
+Unauthenticated requests to protected endpoints return **401**; authenticated
+requests without the required role/ownership return **403**.
+
+## Business rules
+
+- **Inclusive dates.** A request for `01/08–05/08` spans **5 days**; both
+  endpoints count. Modelled by the `DateRange` value object.
+- **Vacation lifecycle (state machine).** `Pending → Approved` or
+  `Pending → Rejected`. A request that is already decided cannot be changed
+  (returns 409).
+- **Company-wide overlap rule.** No two employees may hold **approved** vacations
+  that share a day. The rule is checked when a request is *approved*, not when it
+  is created — pending requests may freely overlap. Adjacent ranges (e.g.
+  `…–05/12` and `06/12–…`) do **not** overlap.
+- **Approval authorization.** Only an Administrator, or the requesting employee's
+  **direct** manager, may approve or reject a request.
+
+## Design decisions and trade-offs
+
+This section documents the interpretation of ambiguous or unusual requirements
+in the brief, and the engineering decisions behind them.
+
+1. **The overlap rule is global, not per-employee.** The acceptance scenarios
+   compare vacations across *different* employees, so the rule is "only one
+   person on vacation at a time, company-wide". This is unusual, so it is
+   implemented exactly as specified but isolated behind the approval step, making
+   it easy to scope per-team/per-department later.
+
+2. **Overlap enforced atomically in the database (concurrency-safe).** A naive
+   "query then insert" check has a time-of-check/time-of-use race: two
+   concurrent approvals can both pass the check and then both commit. A
+   PostgreSQL **GiST exclusion constraint** over an inclusive `daterange`
+   (`WHERE status = 'Approved'`) makes overlapping approved rows impossible at the
+   storage level. The service still does a friendly pre-check for a clean 409
+   message, and catches the constraint violation (`SQLSTATE 23P01`) as the
+   authoritative backstop.
+
+3. **Injectable clock (`TimeProvider`).** The sample data is dated in the past
+   relative to "today", which collides with the "no past start date" rule. Rather
+   than hard-coding `DateTime.Now`, the clock is injected, so the rule is
+   deterministically testable (the unit tests pin "now" to a fixed date) and the
+   historical seed is inserted directly, bypassing the rule.
+
+4. **.NET 8 instead of .NET 7.** The brief mentions ASP.NET Core 7.0+; .NET 7 is
+   already end-of-life, so the project targets **.NET 8 (LTS)**.
+
+5. **Email normalization.** Emails are trimmed and lower-cased before storage and
+   comparison, backed by a unique index, so `Ana.Silva@…` and `ana.silva@…` are
+   treated as the same identity.
+
+6. **Self-referencing manager relationship.** `Employee.ManagerId` is a nullable
+   self-reference (`ON DELETE RESTRICT`), so an employee who still manages others
+   cannot be deleted (409). An employee cannot be their own manager, and a manager
+   must hold the Manager or Administrator role.
+
+7. **HTTPS vs. "simple local setup".** The brief asks for HTTPS-only but also for
+   a frictionless local run. The container serves plain HTTP on `:8080` for
+   easy evaluation; in a real deployment, TLS termination belongs at the
+   ingress/reverse proxy (or via `UseHttpsRedirection` + certificates), which is
+   the standard production pattern.
+
+8. **Swagger is enabled in all environments.** This is a deliberate convenience
+   for evaluation (the compose stack runs with `ASPNETCORE_ENVIRONMENT=Development`
+   by default). In production I would gate it behind `IsDevelopment()` or
+   authentication.
+
+## Cross-cutting concerns
+
+- **Consistent errors (RFC 7807).** All failures return `application/problem+json`:
+  business outcomes are mapped from a `Result` type to `ProblemDetails`,
+  validation failures surface as `ValidationProblemDetails` (field → messages),
+  and unhandled exceptions are converted to a generic 500 ProblemDetails by an
+  `IExceptionHandler` — the stack trace is logged server-side but never returned
+  to the client.
+- **Structured logging (Serilog).** Requests are logged as compact JSON with
+  method, path, status code, elapsed time and a trace id that matches the
+  `traceId` returned in error responses, enabling request↔log correlation.
+- **API versioning.** URL-segment versioning (`/api/v1/...`); Swagger generates
+  one document per discovered version automatically.
+- **Security.** Passwords are hashed with BCrypt; JWTs are validated for issuer,
+  audience, lifetime and signature. The signing key in `appsettings.json` is a
+  development placeholder and must be overridden in production.
+
+## Testing
+
+- **Domain unit tests** cover the inclusive `DateRange`: overlap, adjacency,
+  total-day count and the invalid-range guard.
+- **Service unit tests** cover `VacationRequestService`: the
+  Pending→Approved/Rejected state machine, manager-ownership authorization, the
+  global no-overlap rule on approval, and read scoping. They use the EF Core
+  in-memory provider and the injected fixed clock.
+- **Scope note (unit vs. integration).** The in-memory provider validates the
+  LINQ overlap pre-check and all RBAC/state logic, but it cannot reproduce the
+  PostgreSQL GiST exclusion constraint. That database-level guarantee is verified
+  end-to-end against the real PostgreSQL container.
+
+## Performance and scalability
+
+- **Overlap checks are indexed.** A composite index on
+  `(Status, StartDate, EndDate)` supports the approval-time overlap query, and the
+  GiST index backing the exclusion constraint makes range-overlap lookups
+  efficient as the dataset grows.
+- **No N+1 queries.** Read paths use explicit projections / `Include`, so a list
+  of requests resolves employee names in a single joined query rather than one
+  query per row.
+- **Read scoping at the database.** Managers and employees filter rows in SQL
+  (`WHERE`), not in memory, so the payload and work scale with what the caller is
+  allowed to see.
+- **Connection pooling** is handled by Npgsql out of the box; the API is stateless
+  (JWT-based), so it scales horizontally behind a load balancer.
+- **Next steps for larger volumes:** add pagination to the list endpoints,
+  response caching for the largely-static employee directory, and — if the global
+  overlap rule were relaxed to per-team — partition the exclusion constraint by
+  team to reduce contention.
+
+## What I would add next
+
+Pagination and filtering on list endpoints, a request-cancellation transition for
+employees, integration tests running against a disposable PostgreSQL container
+(Testcontainers), and refresh-token support for longer sessions.
