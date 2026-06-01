@@ -29,6 +29,12 @@ services:
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-vacation};Username=${POSTGRES_USER:-vacation};Password=${POSTGRES_PASSWORD:-vacation_dev_pwd}"
     ports:
       - "${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   pgdata:

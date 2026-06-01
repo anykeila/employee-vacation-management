@@ -20,6 +20,12 @@ RUN dotnet publish src/VacationManagement.Api/VacationManagement.Api.csproj \
 # ---- Runtime stage ----
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
+
+# curl is used by the container HEALTHCHECK to probe /health/ready.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/publish .
 
 # Run as the non-root user provided by the .NET base image (security baseline).

@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -108,6 +109,11 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// Liveness has no checks (process is up); readiness verifies the database is reachable
+// so orchestrators only route traffic once the API can actually serve requests.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>(name: "database", tags: new[] { "ready" });
+
 // Throttle the unauthenticated auth endpoints per client IP to blunt credential
 // stuffing and brute-force attempts. Authenticated traffic is unaffected.
 var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
@@ -156,7 +162,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 await app.RunAsync();
 }

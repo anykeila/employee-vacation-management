@@ -61,7 +61,8 @@ docker compose up --build
 | API base     | `http://localhost:8080/api/v1`           |
 | Swagger UI   | `http://localhost:8080/swagger`          |
 | OpenAPI doc  | `http://localhost:8080/swagger/v1/swagger.json` |
-| Health check | `http://localhost:8080/health`           |
+| Liveness     | `http://localhost:8080/health/live`      |
+| Readiness    | `http://localhost:8080/health/ready` (checks the database) |
 
 On startup the API applies EF Core migrations automatically and backfills the
 seeded users' password hashes. Configuration (ports, DB credentials) can be
@@ -266,9 +267,12 @@ in the brief, and the engineering decisions behind them.
 - **Domain unit tests** cover the inclusive `DateRange`: overlap, adjacency,
   total-day count and the invalid-range guard.
 - **Service unit tests** cover `VacationRequestService`: the
-  Pending→Approved/Rejected state machine, manager-ownership authorization, the
-  global no-overlap rule on approval, and read scoping. They use the EF Core
-  in-memory provider and the injected fixed clock.
+  Pending→Approved/Rejected/Cancelled state machine, manager-ownership
+  authorization, the global no-overlap rule on approval, and read scoping. They
+  use the EF Core in-memory provider and the injected fixed clock.
+- **Validation & pagination unit tests** cover the FluentValidation rules
+  (required fields, email format, password length, date ordering, notes length)
+  and the `PaginationQuery` clamping/`Skip`/`TotalPages` arithmetic.
 - **Scope note (unit vs. integration).** The in-memory provider validates the
   LINQ overlap pre-check and all RBAC/state logic, but it cannot reproduce the
   PostgreSQL GiST exclusion constraint. That database-level guarantee is verified
