@@ -1,5 +1,7 @@
 # Vacation Management API — WorkFlow S.A.
 
+[![CI](https://github.com/anykeila/employee-vacation-management/actions/workflows/ci.yml/badge.svg)](https://github.com/anykeila/employee-vacation-management/actions/workflows/ci.yml)
+
 REST API built with **.NET 8 (ASP.NET Core)** for managing employees and their
 vacation requests, with role-based access control (RBAC), JWT authentication,
 a vacation approval workflow and a company-wide overlap rule enforced at the
@@ -241,6 +243,10 @@ in the brief, and the engineering decisions behind them.
   LINQ overlap pre-check and all RBAC/state logic, but it cannot reproduce the
   PostgreSQL GiST exclusion constraint. That database-level guarantee is verified
   end-to-end against the real PostgreSQL container.
+- **Continuous integration.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+  builds in Release and runs both suites on every push or pull request to `main`.
+  GitHub's `ubuntu-latest` runner provides the Docker daemon the integration tests
+  need, so the GiST constraint is exercised in CI exactly as it is locally.
 
 ## Performance and scalability
 
@@ -265,5 +271,5 @@ in the brief, and the engineering decisions behind them.
 
 ## What I would add next
 
-A request-cancellation transition for employees, refresh-token support for longer
-sessions, and a CI pipeline running the unit and integration suites on every push.
+A request-cancellation transition for employees and refresh-token support for
+longer sessions.
