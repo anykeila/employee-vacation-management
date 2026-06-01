@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vacation-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vacation}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vacation_dev_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-vacation}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vacation} -d ${POSTGRES_DB:-vacation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/VacationManagement.Api/Dockerfile
+    container_name: vacation-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-vacation};Username=${POSTGRES_USER:-vacation};Password=${POSTGRES_PASSWORD:-vacation_dev_pwd}"
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+volumes:
+  pgdata:

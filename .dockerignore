@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/out/
+**/.vs/
+**/.vscode/
+**/.idea/
+.git/
+.github/
+**/*.user
+TestResults/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
