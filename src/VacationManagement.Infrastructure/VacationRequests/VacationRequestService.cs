@@ -65,6 +65,7 @@ public class VacationRequestService : IVacationRequestService
 
         var page = await requests
             .OrderByDescending(v => v.StartDate)
+            .ThenByDescending(v => v.Id)
             .Skip(query.Skip)
             .Take(query.PageSize)
             .ToListAsync(ct);

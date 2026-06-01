@@ -1,4 +1,4 @@
-# Vacation Management API — WorkFlow S.A.
+# Vacation Management API 
 
 [![CI](https://github.com/anykeila/employee-vacation-management/actions/workflows/ci.yml/badge.svg)](https://github.com/anykeila/employee-vacation-management/actions/workflows/ci.yml)
 

@@ -220,6 +220,48 @@ public class VacationRequestServiceTests
     }
 
     [Fact]
+    public async Task Approve_WhenAlreadyCancelled_ReturnsConflict()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Cancelled);
+        var service = Service(db, ManagerOf3, Role.Manager);
+
+        var result = await service.ApproveAsync(request.Id, new DecisionRequest(null));
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be(ResultError.Conflict);
+        db.VacationRequests.Single(v => v.Id == request.Id).Status.Should().Be(VacationStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task Cancel_WhenAlreadyCancelled_ReturnsConflict()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Cancelled);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be(ResultError.Conflict);
+        db.VacationRequests.Single(v => v.Id == request.Id).Status.Should().Be(VacationStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task Cancel_WhenAlreadyRejected_ReturnsConflict()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Rejected);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be(ResultError.Conflict);
+        db.VacationRequests.Single(v => v.Id == request.Id).Status.Should().Be(VacationStatus.Rejected);
+    }
+
+    [Fact]
     public async Task GetById_WhenEmployeeRequestsAnotherEmployeesRecord_ReturnsForbidden()
     {
         using var db = TestDb.NewSeededContext();
@@ -230,5 +272,72 @@ public class VacationRequestServiceTests
 
         result.Succeeded.Should().BeFalse();
         result.Error.Should().Be(ResultError.Forbidden);
+    }
+
+    // The seed contains exactly three approved requests: #1 employee 3, #2 employee 4, #3 employee 2.
+    [Fact]
+    public async Task GetAll_AsAdministrator_ReturnsEveryRequest()
+    {
+        using var db = TestDb.NewSeededContext();
+        var service = Service(db, AdminId, Role.Administrator);
+
+        var result = await service.GetAllAsync(new VacationRequestQuery());
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Items.Select(v => v.EmployeeId).Should().BeEquivalentTo(new[] { ManagerOf3, Employee3, Employee4 });
+    }
+
+    [Fact]
+    public async Task GetAll_AsManager_ReturnsOwnRequestsAndDirectReports()
+    {
+        using var db = TestDb.NewSeededContext();
+        var service = Service(db, ManagerOf3, Role.Manager); // João: own (#3) + report Marta (#1)
+
+        var result = await service.GetAllAsync(new VacationRequestQuery());
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Items.Select(v => v.EmployeeId).Should().BeEquivalentTo(new[] { ManagerOf3, Employee3 });
+    }
+
+    [Fact]
+    public async Task GetAll_AsEmployee_ReturnsOnlyOwnRequests()
+    {
+        using var db = TestDb.NewSeededContext();
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.GetAllAsync(new VacationRequestQuery());
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Items.Should().OnlyContain(v => v.EmployeeId == Employee3);
+        result.Value.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetAll_FilteredByStatus_ExcludesOtherStatuses()
+    {
+        using var db = TestDb.NewSeededContext();
+        Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Pending);
+        var service = Service(db, AdminId, Role.Administrator);
+
+        var result = await service.GetAllAsync(new VacationRequestQuery { Status = VacationStatus.Pending });
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Items.Should().OnlyContain(v => v.Status == nameof(VacationStatus.Pending));
+        result.Value.TotalCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetAll_OrdersByStartDateDescendingThenIdDescending_ForStablePaging()
+    {
+        using var db = TestDb.NewSeededContext();
+        // Two requests sharing the same start date must keep a deterministic order across pages.
+        var older = Seed(db, Employee3, new DateOnly(2027, 1, 10), new DateOnly(2027, 1, 12), VacationStatus.Pending);
+        var newer = Seed(db, Employee3, new DateOnly(2027, 1, 10), new DateOnly(2027, 1, 15), VacationStatus.Pending);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.GetAllAsync(new VacationRequestQuery { Status = VacationStatus.Pending });
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Items.Select(v => v.Id).Should().ContainInOrder(newer.Id, older.Id);
     }
 }

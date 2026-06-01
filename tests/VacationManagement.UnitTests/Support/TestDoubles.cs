@@ -19,6 +19,12 @@ internal sealed class FakeCurrentUser : ICurrentUser
     public Role? Role { get; }
 }
 
+internal sealed class FakePasswordHasher : IPasswordHasher
+{
+    public string Hash(string password) => $"hashed:{password}";
+    public bool Verify(string password, string hash) => hash == $"hashed:{password}";
+}
+
 internal sealed class FixedTimeProvider : TimeProvider
 {
     private readonly DateTimeOffset _now;
