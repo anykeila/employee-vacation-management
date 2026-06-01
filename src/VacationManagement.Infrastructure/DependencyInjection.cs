@@ -3,7 +3,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using VacationManagement.Application.Abstractions;
 using VacationManagement.Application.Authentication;
+using VacationManagement.Application.Employees;
 using VacationManagement.Infrastructure.Authentication;
+using VacationManagement.Infrastructure.Employees;
 using VacationManagement.Infrastructure.Persistence;
 using VacationManagement.Infrastructure.Security;
 
@@ -23,6 +25,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IEmployeeService, EmployeeService>();
 
         return services;
     }
