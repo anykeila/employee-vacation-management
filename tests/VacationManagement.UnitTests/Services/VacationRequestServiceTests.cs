@@ -166,6 +166,60 @@ public class VacationRequestServiceTests
     }
 
     [Fact]
+    public async Task Cancel_ByOwner_TransitionsToCancelled()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Pending);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Status.Should().Be(nameof(VacationStatus.Cancelled));
+    }
+
+    [Fact]
+    public async Task Cancel_ByAdministrator_IsAllowedForAnyEmployee()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee4, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Pending);
+        var service = Service(db, AdminId, Role.Administrator);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeTrue();
+        result.Value!.Status.Should().Be(nameof(VacationStatus.Cancelled));
+    }
+
+    [Fact]
+    public async Task Cancel_AnotherEmployeesRequest_ReturnsForbidden()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee4, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Pending);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be(ResultError.Forbidden);
+        db.VacationRequests.Single(v => v.Id == request.Id).Status.Should().Be(VacationStatus.Pending);
+    }
+
+    [Fact]
+    public async Task Cancel_WhenAlreadyApproved_ReturnsConflict()
+    {
+        using var db = TestDb.NewSeededContext();
+        var request = Seed(db, Employee3, new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 5), VacationStatus.Approved);
+        var service = Service(db, Employee3, Role.Employee);
+
+        var result = await service.CancelAsync(request.Id);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Be(ResultError.Conflict);
+        db.VacationRequests.Single(v => v.Id == request.Id).Status.Should().Be(VacationStatus.Approved);
+    }
+
+    [Fact]
     public async Task GetById_WhenEmployeeRequestsAnotherEmployeesRecord_ReturnsForbidden()
     {
         using var db = TestDb.NewSeededContext();

@@ -82,4 +82,15 @@ public class VacationRequestsController : ApiControllerBase
         var result = await _requests.RejectAsync(id, request ?? new DecisionRequest(null), ct);
         return result.Succeeded ? Ok(result.Value) : Failure(result.Error, result.Message);
     }
+
+    [HttpPost("{id:int}/cancel")]
+    [ProducesResponseType(typeof(VacationRequestResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+    {
+        var result = await _requests.CancelAsync(id, ct);
+        return result.Succeeded ? Ok(result.Value) : Failure(result.Error, result.Message);
+    }
 }

@@ -133,6 +133,7 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 | `GET  /vacation-requests/{id}`             | any           | own + direct reports | own only  |
 | `POST /vacation-requests/{id}/approve`     | any           | direct reports only | ❌ (403)   |
 | `POST /vacation-requests/{id}/reject`      | any           | direct reports only | ❌ (403)   |
+| `POST /vacation-requests/{id}/cancel`      | any           | own only          | own only     |
 
 Unauthenticated requests to protected endpoints return **401**; authenticated
 requests without the required role/ownership return **403**.
@@ -166,9 +167,11 @@ requests still only ever sees their own team's rows.
 
 - **Inclusive dates.** A request for `01/08–05/08` spans **5 days**; both
   endpoints count. Modelled by the `DateRange` value object.
-- **Vacation lifecycle (state machine).** `Pending → Approved` or
-  `Pending → Rejected`. A request that is already decided cannot be changed
-  (returns 409).
+- **Vacation lifecycle (state machine).** `Pending → Approved`,
+  `Pending → Rejected`, or `Pending → Cancelled`. Approve/reject are manager
+  decisions; cancellation is the employee withdrawing their own still-pending
+  request (an administrator may cancel on anyone's behalf). A request that has
+  already left the pending state cannot be changed (returns 409).
 - **Company-wide overlap rule.** No two employees may hold **approved** vacations
   that share a day. The rule is checked when a request is *approved*, not when it
   is created — pending requests may freely overlap. Adjacent ranges (e.g.
@@ -290,5 +293,6 @@ in the brief, and the engineering decisions behind them.
 
 ## What I would add next
 
-A request-cancellation transition for employees (`Pending → Cancelled`), and
-per-device refresh-token management (listing and revoking active sessions).
+Per-device refresh-token management (listing and revoking active sessions), and
+a notification hook so employees are emailed when a manager decides on their
+request.

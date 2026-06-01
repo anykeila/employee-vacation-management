@@ -91,6 +91,31 @@ public class VacationWorkflowTests
         approve.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task Employee_CancelsOwnPendingRequest_TransitionsToCancelled()
+    {
+        var marta = await _factory.AuthenticatedClientAsync(TestApi.Marta);
+        var created = await CreateRequestAsync(marta, Base.AddDays(130), Base.AddDays(134));
+
+        var cancel = await marta.PostAsync($"/api/v1/vacation-requests/{created.Id}/cancel", null);
+
+        cancel.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cancelled = await cancel.Content.ReadFromJsonAsync<VacationRequestResponse>();
+        cancelled!.Status.Should().Be("Cancelled");
+    }
+
+    [Fact]
+    public async Task Employee_CannotCancelAnotherEmployeesRequest_Returns403()
+    {
+        var marta = await _factory.AuthenticatedClientAsync(TestApi.Marta);
+        var martaReq = await CreateRequestAsync(marta, Base.AddDays(160), Base.AddDays(164));
+
+        var henrique = await _factory.AuthenticatedClientAsync(TestApi.Henrique);
+        var cancel = await henrique.PostAsync($"/api/v1/vacation-requests/{martaReq.Id}/cancel", null);
+
+        cancel.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     private static async Task<VacationRequestResponse> CreateRequestAsync(
         HttpClient client, DateOnly start, DateOnly end)
     {

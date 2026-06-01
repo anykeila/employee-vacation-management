@@ -130,6 +130,30 @@ public class VacationRequestService : IVacationRequestService
     public Task<Result<VacationRequestResponse>> RejectAsync(int id, DecisionRequest request, CancellationToken ct = default)
         => DecideAsync(id, VacationStatus.Rejected, request, ct);
 
+    public async Task<Result<VacationRequestResponse>> CancelAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _db.VacationRequests.Include(v => v.Employee).FirstOrDefaultAsync(v => v.Id == id, ct);
+        if (entity is null)
+        {
+            return Result<VacationRequestResponse>.Failure(ResultError.NotFound, $"Vacation request {id} was not found.");
+        }
+
+        if (!CanCancel(entity))
+        {
+            return Result<VacationRequestResponse>.Failure(ResultError.Forbidden, "You can only cancel your own vacation requests.");
+        }
+
+        if (entity.Status != VacationStatus.Pending)
+        {
+            return Result<VacationRequestResponse>.Failure(ResultError.Conflict, $"Vacation request {id} is already {entity.Status} and cannot be cancelled.");
+        }
+
+        entity.Status = VacationStatus.Cancelled;
+        await _db.SaveChangesAsync(ct);
+
+        return await LoadResponseAsync(entity.Id, ct);
+    }
+
     private async Task<Result<VacationRequestResponse>> DecideAsync(int id, VacationStatus decision, DecisionRequest request, CancellationToken ct)
     {
         var entity = await _db.VacationRequests.Include(v => v.Employee).FirstOrDefaultAsync(v => v.Id == id, ct);
@@ -195,6 +219,10 @@ public class VacationRequestService : IVacationRequestService
         Role.Manager => request.Employee.ManagerId == _currentUser.Id,
         _ => false
     };
+
+    // The owner withdraws their own request; an administrator may cancel on anyone's behalf.
+    private bool CanCancel(VacationRequest request)
+        => _currentUser.Role == Role.Administrator || request.EmployeeId == _currentUser.Id;
 
     private async Task<Result<VacationRequestResponse>> LoadResponseAsync(int id, CancellationToken ct)
     {

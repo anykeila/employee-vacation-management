@@ -33,4 +33,5 @@ public interface IVacationRequestService
     Task<Result<VacationRequestResponse>> CreateAsync(CreateVacationRequestRequest request, CancellationToken ct = default);
     Task<Result<VacationRequestResponse>> ApproveAsync(int id, DecisionRequest request, CancellationToken ct = default);
     Task<Result<VacationRequestResponse>> RejectAsync(int id, DecisionRequest request, CancellationToken ct = default);
+    Task<Result<VacationRequestResponse>> CancelAsync(int id, CancellationToken ct = default);
 }
