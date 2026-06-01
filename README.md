@@ -21,7 +21,7 @@ database level.
 | Documentation      | Swagger / OpenAPI (Swashbuckle)       |
 | Logging            | Serilog (structured JSON)             |
 | Error format       | RFC 7807 ProblemDetails               |
-| Tests              | xUnit + FluentAssertions + EF InMemory |
+| Tests              | xUnit + FluentAssertions + EF InMemory (unit) + Testcontainers (integration) |
 | Containerization   | Docker + docker-compose               |
 
 ## Architecture
@@ -32,12 +32,16 @@ domain**:
 ```
 VacationManagement.sln
 ├── src/
-│   ├── VacationManagement.Domain          # Entities, enums, value objects, domain rules (no deps)
-│   ├── VacationManagement.Application      # Service interfaces, DTOs, validators, Result type
-│   ├── VacationManagement.Infrastructure   # EF Core, persistence, security, service implementations
-│   └── VacationManagement.Api              # Controllers, auth, Swagger, error handling, composition root
-└── tests/
-    └── VacationManagement.UnitTests        # Domain + service unit tests (overlap and RBAC)
+│   ├── VacationManagement.Domain           # Entities, enums, value objects, domain rules (no deps)
+│   ├── VacationManagement.Application       # Service interfaces, DTOs, validators, Result type
+│   ├── VacationManagement.Infrastructure    # EF Core, persistence, security, service implementations
+│   └── VacationManagement.Api               # Controllers, auth, Swagger, error handling, composition root
+│       └── Dockerfile                       # Multi-stage build for the API image
+├── tests/
+│   ├── VacationManagement.UnitTests          # Domain + service unit tests (overlap, RBAC, validation, pagination)
+│   └── VacationManagement.IntegrationTests    # End-to-end tests against real PostgreSQL (Testcontainers)
+├── docker-compose.yml                       # API + PostgreSQL stack for local runs
+├── .github/workflows/ci.yml                 # CI: build + unit and integration tests on every push/PR 
 ```
 
 **Why layered instead of full Clean Architecture / CQRS:** for the scope of this
