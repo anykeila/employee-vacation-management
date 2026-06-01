@@ -14,11 +14,13 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\VacationManagement.Application\VacationManagement.Application.csproj" />
     <ProjectReference Include="..\..\src\VacationManagement.Domain\VacationManagement.Domain.csproj" />
+    <ProjectReference Include="..\..\src\VacationManagement.Infrastructure\VacationManagement.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
