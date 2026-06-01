@@ -25,5 +25,10 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:DefaultConnection", _database.GetConnectionString());
+
+        // The suite issues many logins in seconds from the same loopback address; lift the
+        // auth rate limit so throttling never masks a functional assertion. A dedicated test
+        // covers the limiter itself.
+        builder.UseSetting("RateLimiting:AuthPermitLimit", "10000");
     }
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using VacationManagement.Application.Authentication;
 using Xunit;
 
@@ -35,6 +36,26 @@ public class AuthAndRbacTests
             new LoginRequest(TestApi.Admin, "wrong-password"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Login_ExceedingRateLimit_Returns429()
+    {
+        // Fresh host with a tiny limit so the limiter trips deterministically.
+        using var factory = _factory.WithWebHostBuilder(b =>
+            b.UseSetting("RateLimiting:AuthPermitLimit", "3"));
+        var client = factory.CreateClient();
+        var bad = new LoginRequest(TestApi.Admin, "wrong-password");
+
+        // Exhaust the window (each returns 401), then the next request is throttled.
+        for (var i = 0; i < 3; i++)
+        {
+            await client.PostAsJsonAsync("/api/v1/auth/login", bad);
+        }
+
+        var throttled = await client.PostAsJsonAsync("/api/v1/auth/login", bad);
+
+        throttled.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
     }
 
     [Fact]
