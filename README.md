@@ -107,11 +107,22 @@ curl http://localhost:8080/api/v1/employees \
 In the Swagger UI, click **Authorize** and paste the token (without the
 `Bearer ` prefix).
 
+Login returns a short-lived **access token** and a long-lived **refresh token**.
+When the access token expires, exchange the refresh token for a fresh pair —
+the old refresh token is rotated out (single-use):
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refreshToken":"<refresh-token>"}'
+```
+
 ## Endpoints and authorization
 
 | Method & path                              | Administrator | Manager           | Employee     |
 | ------------------------------------------ | ------------- | ----------------- | ------------ |
 | `POST /auth/login`                         | public        | public            | public       |
+| `POST /auth/refresh`                       | public        | public            | public       |
 | `GET  /employees`                          | ✅            | ✅                | ❌ (403)     |
 | `GET  /employees/{id}`                     | ✅            | ✅                | ❌ (403)     |
 | `POST /employees`                          | ✅            | ❌ (403)          | ❌ (403)     |
@@ -214,6 +225,14 @@ in the brief, and the engineering decisions behind them.
    by default). In production I would gate it behind `IsDevelopment()` or
    authentication.
 
+9. **Refresh tokens are opaque, hashed and rotated.** The refresh token is a
+   256-bit random value (not a JWT), stored only as a **SHA-256 hash**, so a
+   database leak cannot be replayed against `/auth/refresh`. Each use **rotates**
+   the token (the old one is revoked, single-use); presenting an already-rotated
+   token is treated as theft and **revokes every active token** for that user.
+   The access JWT stays short-lived; the refresh token's lifetime is configurable
+   (`Jwt:RefreshTokenDays`, default 7).
+
 ## Cross-cutting concerns
 
 - **Consistent errors (RFC 7807).** All failures return `application/problem+json`:
@@ -271,5 +290,5 @@ in the brief, and the engineering decisions behind them.
 
 ## What I would add next
 
-A request-cancellation transition for employees and refresh-token support for
-longer sessions.
+A request-cancellation transition for employees (`Pending → Cancelled`), and
+per-device refresh-token management (listing and revoking active sessions).
