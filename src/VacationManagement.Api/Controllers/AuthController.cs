@@ -1,5 +1,7 @@
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using VacationManagement.Api.Infrastructure;
 using VacationManagement.Application.Authentication;
 
 namespace VacationManagement.Api.Controllers;
@@ -7,6 +9,7 @@ namespace VacationManagement.Api.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/auth")]
+[EnableRateLimiting(RateLimitPolicies.Auth)]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;

@@ -1,7 +1,9 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -72,6 +74,18 @@ builder.Services
 var jwt = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
     ?? throw new InvalidOperationException("JWT settings are not configured.");
 
+if (string.IsNullOrWhiteSpace(jwt.Issuer) || string.IsNullOrWhiteSpace(jwt.Audience))
+{
+    throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience must be configured.");
+}
+
+// HS256 requires a signing key of at least 256 bits. Fail fast at boot instead of
+// surfacing an obscure cryptographic error on the first token request.
+if (Encoding.UTF8.GetByteCount(jwt.Key) < 32)
+{
+    throw new InvalidOperationException("Jwt:Key must be at least 32 bytes (256 bits) for HS256 signing.");
+}
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -93,6 +107,23 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+
+// Throttle the unauthenticated auth endpoints per client IP to blunt credential
+// stuffing and brute-force attempts. Authenticated traffic is unaffected.
+var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+var authWindowSeconds = builder.Configuration.GetValue("RateLimiting:AuthWindowSeconds", 60);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(RateLimitPolicies.Auth, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authPermitLimit,
+                Window = TimeSpan.FromSeconds(authWindowSeconds)
+            }));
+});
 
 var app = builder.Build();
 
@@ -118,6 +149,8 @@ app.UseSwaggerUI(options =>
         options.SwaggerEndpoint($"/swagger/{description.GroupName}/swagger.json", description.GroupName.ToUpperInvariant());
     }
 });
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

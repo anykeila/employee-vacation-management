@@ -32,13 +32,20 @@ public class AuthService : IAuthService
         _settings = settings.Value;
     }
 
+    // A precomputed BCrypt hash an attacker's password can never match. When the email is
+    // unknown we still verify against this so the work factor is paid on every code path —
+    // otherwise the absence of a hash check would leak which emails exist via response timing.
+    private static readonly string DummyHash = BCrypt.Net.BCrypt.HashPassword("timing-equalizer");
+
     public async Task<LoginResponse?> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var employee = await _db.Employees.FirstOrDefaultAsync(e => e.Email == email, ct);
 
-        // Verify always runs against a hash to avoid leaking which emails exist via timing.
-        if (employee is null || !_passwordHasher.Verify(request.Password, employee.PasswordHash))
+        // Always run Verify (against a dummy hash when the user is missing) so login takes
+        // the same time whether or not the account exists.
+        var passwordValid = _passwordHasher.Verify(request.Password, employee?.PasswordHash ?? DummyHash);
+        if (employee is null || !passwordValid)
         {
             return null;
         }
