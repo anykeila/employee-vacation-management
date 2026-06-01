@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using VacationManagement.Application.Abstractions;
 using VacationManagement.Application.Authentication;
 using VacationManagement.Application.Employees;
@@ -31,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IEmployeeService, EmployeeService>();
         services.AddScoped<IVacationRequestService, VacationRequestService>();
+
+        services.AddHostedService<RefreshTokenCleanupService>();
 
         return services;
     }

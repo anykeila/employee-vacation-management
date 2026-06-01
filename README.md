@@ -234,7 +234,10 @@ in the brief, and the engineering decisions behind them.
    the token (the old one is revoked, single-use); presenting an already-rotated
    token is treated as theft and **revokes every active token** for that user.
    The access JWT stays short-lived; the refresh token's lifetime is configurable
-   (`Jwt:RefreshTokenDays`, default 7).
+   (`Jwt:RefreshTokenDays`, default 7). A hosted `BackgroundService` prunes
+   **expired** tokens periodically so the table stays bounded; revoked-but-not-yet-
+   expired rows are deliberately kept so replay within the window still trips the
+   theft response.
 
 ## Cross-cutting concerns
 
@@ -250,8 +253,13 @@ in the brief, and the engineering decisions behind them.
 - **API versioning.** URL-segment versioning (`/api/v1/...`); Swagger generates
   one document per discovered version automatically.
 - **Security.** Passwords are hashed with BCrypt; JWTs are validated for issuer,
-  audience, lifetime and signature. The signing key in `appsettings.json` is a
-  development placeholder and must be overridden in production.
+  audience, lifetime and signature. The signing key length is checked at startup
+  (HS256 needs ≥256 bits) so a misconfiguration fails fast at boot. Login always
+  runs a hash verification — even for unknown emails — so response time never
+  reveals whether an account exists. The auth endpoints are **rate-limited** per
+  IP (`RateLimiting:AuthPermitLimit`/`AuthWindowSeconds`) to blunt brute-force.
+  The signing key in `appsettings.json` is a development placeholder and must be
+  overridden in production.
 
 ## Testing
 
