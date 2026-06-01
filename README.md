@@ -49,10 +49,16 @@ external dependencies, so the core business rules (e.g. the inclusive
 
 ## Getting started
 
-**Prerequisite: Docker only.** `docker-compose` brings up the API together with a
-PostgreSQL instance — no need to install .NET or PostgreSQL locally.
+**Prerequisite: Docker only** — make sure Docker Desktop (or the Docker daemon)
+is running. `docker-compose` brings up the API together with a PostgreSQL
+instance, so there is no need to install .NET or PostgreSQL locally.
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/anykeila/employee-vacation-management.git
+cd employee-vacation-management
+
+# 2. Build and start the stack (API + PostgreSQL)
 docker compose up --build
 ```
 
@@ -68,6 +74,13 @@ On startup the API applies EF Core migrations automatically and backfills the
 seeded users' password hashes. Configuration (ports, DB credentials) can be
 overridden with a `.env` file — see [.env.example](.env.example). Defaults are
 baked into `docker-compose.yml`, so the stack also runs without one.
+
+To stop the stack, press `Ctrl+C` in the terminal running it and then:
+
+```bash
+docker compose down        # stop and remove the containers
+docker compose down -v     # also drop the database volume for a clean start
+```
 
 For local development outside the container, the **.NET 8 SDK** is required
 (`global.json` pins the 8.0 line). Run the tests with:
