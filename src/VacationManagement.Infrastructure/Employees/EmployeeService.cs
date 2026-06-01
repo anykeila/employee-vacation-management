@@ -20,13 +20,31 @@ public class EmployeeService : IEmployeeService
         _passwordHasher = passwordHasher;
     }
 
-    public async Task<IReadOnlyList<EmployeeResponse>> GetAllAsync(CancellationToken ct = default)
+    public async Task<PagedResult<EmployeeResponse>> GetAllAsync(EmployeeQuery query, CancellationToken ct = default)
     {
-        return await _db.Employees
-            .AsNoTracking()
+        var employees = _db.Employees.AsNoTracking();
+
+        if (query.Role is Role role)
+        {
+            employees = employees.Where(e => e.Role == role);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = query.Search.Trim().ToLower();
+            employees = employees.Where(e => e.Name.ToLower().Contains(term) || e.Email.Contains(term));
+        }
+
+        var totalCount = await employees.CountAsync(ct);
+
+        var items = await employees
             .OrderBy(e => e.Id)
+            .Skip(query.Skip)
+            .Take(query.PageSize)
             .Select(Projection)
             .ToListAsync(ct);
+
+        return new PagedResult<EmployeeResponse>(items, query.Page, query.PageSize, totalCount);
     }
 
     public async Task<EmployeeResponse?> GetByIdAsync(int id, CancellationToken ct = default)

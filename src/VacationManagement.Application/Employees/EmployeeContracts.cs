@@ -9,9 +9,15 @@ public record CreateEmployeeRequest(string Name, string Email, string Password, 
 
 public record UpdateEmployeeRequest(string Name, string Email, Role Role, int? ManagerId);
 
+public record EmployeeQuery : PaginationQuery
+{
+    public Role? Role { get; init; }
+    public string? Search { get; init; }
+}
+
 public interface IEmployeeService
 {
-    Task<IReadOnlyList<EmployeeResponse>> GetAllAsync(CancellationToken ct = default);
+    Task<PagedResult<EmployeeResponse>> GetAllAsync(EmployeeQuery query, CancellationToken ct = default);
     Task<EmployeeResponse?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<Result<EmployeeResponse>> CreateAsync(CreateEmployeeRequest request, CancellationToken ct = default);
     Task<Result<EmployeeResponse>> UpdateAsync(int id, UpdateEmployeeRequest request, CancellationToken ct = default);

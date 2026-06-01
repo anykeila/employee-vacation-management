@@ -25,28 +25,53 @@ public class VacationRequestService : IVacationRequestService
         _timeProvider = timeProvider;
     }
 
-    public async Task<Result<IReadOnlyList<VacationRequestResponse>>> GetAllAsync(CancellationToken ct = default)
+    public async Task<Result<PagedResult<VacationRequestResponse>>> GetAllAsync(VacationRequestQuery query, CancellationToken ct = default)
     {
         if (_currentUser.Id is not int userId || _currentUser.Role is not Role role)
         {
-            return Result<IReadOnlyList<VacationRequestResponse>>.Failure(ResultError.Forbidden, "The authenticated user could not be resolved.");
+            return Result<PagedResult<VacationRequestResponse>>.Failure(ResultError.Forbidden, "The authenticated user could not be resolved.");
         }
 
-        var query = _db.VacationRequests.AsNoTracking().Include(v => v.Employee).AsQueryable();
+        var requests = _db.VacationRequests.AsNoTracking().Include(v => v.Employee).AsQueryable();
 
-        query = role switch
+        requests = role switch
         {
-            Role.Administrator => query,
-            Role.Manager => query.Where(v => v.EmployeeId == userId || v.Employee.ManagerId == userId),
-            _ => query.Where(v => v.EmployeeId == userId)
+            Role.Administrator => requests,
+            Role.Manager => requests.Where(v => v.EmployeeId == userId || v.Employee.ManagerId == userId),
+            _ => requests.Where(v => v.EmployeeId == userId)
         };
 
-        var requests = await query
+        if (query.Status is VacationStatus status)
+        {
+            requests = requests.Where(v => v.Status == status);
+        }
+
+        if (query.EmployeeId is int employeeId)
+        {
+            requests = requests.Where(v => v.EmployeeId == employeeId);
+        }
+
+        if (query.From is DateOnly from)
+        {
+            requests = requests.Where(v => v.EndDate >= from);
+        }
+
+        if (query.To is DateOnly to)
+        {
+            requests = requests.Where(v => v.StartDate <= to);
+        }
+
+        var totalCount = await requests.CountAsync(ct);
+
+        var page = await requests
             .OrderByDescending(v => v.StartDate)
+            .Skip(query.Skip)
+            .Take(query.PageSize)
             .ToListAsync(ct);
 
-        IReadOnlyList<VacationRequestResponse> response = requests.Select(ToResponse).ToList();
-        return Result<IReadOnlyList<VacationRequestResponse>>.Success(response);
+        IReadOnlyList<VacationRequestResponse> items = page.Select(ToResponse).ToList();
+        var result = new PagedResult<VacationRequestResponse>(items, query.Page, query.PageSize, totalCount);
+        return Result<PagedResult<VacationRequestResponse>>.Success(result);
     }
 
     public async Task<Result<VacationRequestResponse>> GetByIdAsync(int id, CancellationToken ct = default)

@@ -2,6 +2,7 @@ using Asp.Versioning;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VacationManagement.Application.Common;
 using VacationManagement.Application.Employees;
 
 namespace VacationManagement.Api.Controllers;
@@ -28,9 +29,9 @@ public class EmployeesController : ApiControllerBase
 
     [HttpGet]
     [Authorize(Roles = "Administrator,Manager")]
-    [ProducesResponseType(typeof(IReadOnlyList<EmployeeResponse>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-        => Ok(await _employees.GetAllAsync(ct));
+    [ProducesResponseType(typeof(PagedResult<EmployeeResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll([FromQuery] EmployeeQuery query, CancellationToken ct)
+        => Ok(await _employees.GetAllAsync(query, ct));
 
     [HttpGet("{id:int}")]
     [Authorize(Roles = "Administrator,Manager")]

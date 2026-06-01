@@ -2,6 +2,7 @@ using Asp.Versioning;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VacationManagement.Application.Common;
 using VacationManagement.Application.VacationRequests;
 
 namespace VacationManagement.Api.Controllers;
@@ -24,10 +25,10 @@ public class VacationRequestsController : ApiControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<VacationRequestResponse>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    [ProducesResponseType(typeof(PagedResult<VacationRequestResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll([FromQuery] VacationRequestQuery query, CancellationToken ct)
     {
-        var result = await _requests.GetAllAsync(ct);
+        var result = await _requests.GetAllAsync(query, ct);
         return result.Succeeded ? Ok(result.Value) : Failure(result.Error, result.Message);
     }
 

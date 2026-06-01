@@ -124,6 +124,31 @@ In the Swagger UI, click **Authorize** and paste the token (without the
 Unauthenticated requests to protected endpoints return **401**; authenticated
 requests without the required role/ownership return **403**.
 
+### Pagination and filtering
+
+Both list endpoints are paged and return a `PagedResult` envelope
+(`items`, `page`, `pageSize`, `totalCount`, `totalPages`). `pageSize` defaults to
+20 and is clamped to a maximum of 100, so a caller cannot request an unbounded
+payload.
+
+| Endpoint                  | Query parameters                                                        |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `GET /employees`          | `page`, `pageSize`, `role` (e.g. `Manager`), `search` (name or email)   |
+| `GET /vacation-requests`  | `page`, `pageSize`, `status`, `employeeId`, `from`, `to` (date window)  |
+
+```bash
+# Managers only, first page of 50
+curl "http://localhost:8080/api/v1/employees?role=Manager&pageSize=50" \
+  -H "Authorization: Bearer <token>"
+
+# Approved requests that intersect December 2026
+curl "http://localhost:8080/api/v1/vacation-requests?status=Approved&from=2026-12-01&to=2026-12-31" \
+  -H "Authorization: Bearer <token>"
+```
+
+Filtering is applied **after** the role-based scoping, in SQL — a manager paging
+requests still only ever sees their own team's rows.
+
 ## Business rules
 
 - **Inclusive dates.** A request for `01/08–05/08` spans **5 days**; both
@@ -229,15 +254,16 @@ in the brief, and the engineering decisions behind them.
 - **Read scoping at the database.** Managers and employees filter rows in SQL
   (`WHERE`), not in memory, so the payload and work scale with what the caller is
   allowed to see.
+- **Paged list endpoints.** Both collections are paged (`page`/`pageSize`, capped
+  at 100) with `Skip`/`Take` translated to SQL `LIMIT`/`OFFSET`, and the filters
+  run in the same query, so a large dataset never materialises in memory.
 - **Connection pooling** is handled by Npgsql out of the box; the API is stateless
   (JWT-based), so it scales horizontally behind a load balancer.
-- **Next steps for larger volumes:** add pagination to the list endpoints,
-  response caching for the largely-static employee directory, and — if the global
-  overlap rule were relaxed to per-team — partition the exclusion constraint by
-  team to reduce contention.
+- **Next steps for larger volumes:** response caching for the largely-static
+  employee directory, and — if the global overlap rule were relaxed to per-team —
+  partition the exclusion constraint by team to reduce contention.
 
 ## What I would add next
 
-Pagination and filtering on list endpoints, a request-cancellation transition for
-employees, integration tests running against a disposable PostgreSQL container
-(Testcontainers), and refresh-token support for longer sessions.
+A request-cancellation transition for employees, refresh-token support for longer
+sessions, and a CI pipeline running the unit and integration suites on every push.
