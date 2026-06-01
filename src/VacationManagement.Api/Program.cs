@@ -21,7 +21,9 @@ try
     await RunAsync(args);
     return 0;
 }
-catch (Exception ex)
+// StopTheHostException is thrown internally by WebApplicationFactory to capture
+// the built host during integration tests; it must not be treated as a failure.
+catch (Exception ex) when (ex.GetType().Name is not "StopTheHostException")
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
     return 1;
@@ -125,3 +127,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 await app.RunAsync();
 }
+
+// Exposes the implicit Program class to the integration test project so that
+// WebApplicationFactory<Program> can bootstrap the real HTTP pipeline.
+public partial class Program { }
